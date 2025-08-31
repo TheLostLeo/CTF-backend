@@ -25,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
-	log.Println("Database migration completed successfully!")
+	log.Println("✅ Database migration completed successfully!")
 
 	portString := os.Getenv("PORT")
 	if portString == "" {
