@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -24,14 +22,11 @@ func main() {
 
 	router := routes.NewRouter()
 
-	srv := &http.Server{
-		Handler: router,
-		Addr:    ":" + portString,
-	}
+	// Gin has built-in server, so we can use Run() method
+	log.Printf("Starting CTF Backend server on port %s", portString)
+	log.Printf("Server running at http://localhost:%s", portString)
 
-	fmt.Printf("Starting server on port %s\n", portString)
-
-	err = srv.ListenAndServe()
+	err = router.Run(":" + portString)
 	if err != nil {
 		log.Fatal("Failed to start server:", err)
 	}

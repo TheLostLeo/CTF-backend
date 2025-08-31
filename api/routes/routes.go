@@ -1,51 +1,48 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 	"os"
+	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 // NewRouter creates and configures the HTTP router
-func NewRouter() *chi.Mux {
-	router := chi.NewRouter()
+func NewRouter() *gin.Engine {
+	router := gin.Default()
 
 	// Add CORS middleware
-	router.Use(cors.Handler(cors.Options{
-		// AllowedOrigins: Use this to allow specific domains.
-		AllowedOrigins: []string{
-			"http://*",
-			"https://*",
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:3000",
+			"http://localhost:3001",
+			"http://localhost:5173",
+			"http://localhost:8080",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:5173",
 		},
-		AllowedMethods: []string{
+		AllowMethods: []string{
 			"GET",
 			"POST",
 			"PUT",
 			"DELETE",
 			"OPTIONS",
 		},
-		AllowedHeaders: []string{
+		AllowHeaders: []string{
 			"Accept",
 			"Authorization",
 			"Content-Type",
 			"X-CSRF-Token",
 			"X-Requested-With",
 		},
-		ExposedHeaders: []string{
+		ExposeHeaders: []string{
 			"Link",
 		},
 		AllowCredentials: true,
-		MaxAge:           300,
+		MaxAge:           5 * time.Minute,
 	}))
-
-	// Add other middleware
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.RequestID)
 
 	// Setup routes
 	setupBasicRoutes(router)
@@ -54,17 +51,20 @@ func NewRouter() *chi.Mux {
 }
 
 // setupBasicRoutes configures the basic application routes
-func setupBasicRoutes(router *chi.Mux) {
+func setupBasicRoutes(router *gin.Engine) {
 	// Root endpoint
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"message": "Welcome to CTF Backend API", "version": "1.0.0"}`)
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Welcome to CTF Backend API",
+			"version": "1.0.0",
+		})
 	})
 
 	// Health check endpoint
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status": "healthy", "port": "%s"}`, os.Getenv("PORT"))
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "healthy",
+			"port":   os.Getenv("PORT"),
+		})
 	})
 }
