@@ -1,192 +1,275 @@
-# CTF Backend
+# Connecting EC2 Instance to RDS with KMS Encryption
 
-A robust backend system for Capture The Flag (CTF) competitions built with Go and Gin framework.
+This guide explains how to securely connect an EC2 instance to AWS RDS PostgreSQL with KMS encryption for your CTF backend application.
 
-## Features
+## Prerequisites
 
-- **User Management**: Registration, authentication, and user profiles
-- **Challenge Management**: Create, update, and manage CTF challenges
-- **Flag Submission**: Secure flag submission with rate limiting
-- **Leaderboard**: Real-time scoring and rankings
-- **Admin Panel**: Administrative controls for managing users and challenges
-- **Rate Limiting**: Protection against brute force attacks
-- **CORS Support**: Cross-origin resource sharing enabled
-- **Database Integration**: PostgreSQL with GORM ORM
+- AWS Account with appropriate permissions
+- EC2 instance running Amazon Linux 2/2023
+- Basic understanding of AWS services
 
-## Tech Stack
+## Step 1: Create KMS Key for RDS Encryption
 
-- **Backend**: Go 1.23+ with Gin framework
-- **Database**: PostgreSQL (AWS RDS recommended for production)
-- **ORM**: GORM
-- **Authentication**: SHA-256 password hashing with custom tokens
-- **Deployment**: AWS EC2, ECS, or Elastic Beanstalk
+### Using AWS Console
+1. Navigate to **AWS KMS Console**
+2. Click **"Create key"**
+3. Select **"Symmetric"** key type
+4. Choose **"Encrypt and decrypt"** usage
+5. Add key description: "CTF Database Encryption Key"
+6. Configure key policy to allow RDS service access
+7. **Note the Key ID** for RDS configuration
 
-## Project Structure
-
-```
-CTF-backend/
-├── api/
-│   └── routes/           # HTTP route definitions
-├── controllers/          # Request handlers
-│   ├── admin_controller.go
-│   ├── challenge_controller.go
-│   └── user_controller.go
-├── middleware/           # HTTP middleware
-│   ├── admin_middleware.go
-│   ├── auth_middleware.go
-│   └── rate_limit_middleware.go
-├── models/              # Database models
-│   ├── challenge.go
-│   ├── models.go
-│   ├── submission.go
-│   └── user.go
-├── database/            # Database connection
-│   └── database.go
-├── main.go             # Application entry point
-├── .env.example        # Environment variables template
-└── AWS_DEPLOYMENT.md   # AWS deployment guide
-```
-
-## Local Development
-
-### Prerequisites
-
-- Go 1.23 or higher
-- PostgreSQL database
-- Git
-
-### Setup
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/TheLostLeo/CTF-backend.git
-   cd CTF-backend
-   ```
-
-2. **Install dependencies**
-   ```bash
-   go mod tidy
-   ```
-
-3. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database configuration
-   ```
-
-4. **Run the application**
-   ```bash
-   go run main.go
-   ```
-
-The server will start on the port specified in your `.env` file (default: 8080).
-
-## API Endpoints
-
-### Public Endpoints
-
-- `GET /health` - Health check
-- `GET /api/v1/challenges` - List all challenges
-- `GET /api/v1/challenges/:id` - Get specific challenge
-- `GET /api/v1/leaderboard` - Get leaderboard
-- `POST /api/v1/register` - User registration (rate limited)
-- `POST /api/v1/login` - User login (rate limited)
-
-### Protected Endpoints (Requires Authentication)
-
-- `GET /api/v1/profile` - Get user profile
-- `POST /api/v1/challenges/:id/submit` - Submit flag (rate limited)
-
-### Admin Endpoints (Requires Admin Access)
-
-- `POST /api/v1/admin/challenges` - Create challenge
-- `PUT /api/v1/admin/challenges/:id` - Update challenge
-- `DELETE /api/v1/admin/challenges/:id` - Delete challenge
-- `GET /api/v1/admin/users` - List all users
-- `GET /api/v1/admin/dashboard` - Admin dashboard
-
-## Authentication
-
-The application uses a simple token-based authentication system. For production use, consider implementing JWT tokens.
-
-**Headers required for protected endpoints:**
-```
-Authorization: Bearer <token>
-```
-
-## Rate Limiting
-
-- **Authentication endpoints**: 10 requests per minute per IP
-- **Flag submission**: 5 requests per minute per IP
-
-## Database Models
-
-### User
-- ID, Username, Email, Password (hashed)
-- Score, IsAdmin flag
-- Created/Updated timestamps, soft delete support
-
-### Challenge
-- ID, Title, Description, Category
-- Points, Flag, Hint, File URL
-- Active status, Created/Updated timestamps
-
-### Submission
-- ID, User ID, Challenge ID
-- Submitted Flag, Is Correct flag
-- Created timestamp
-
-## Deployment
-
-For production deployment on AWS, see [AWS_DEPLOYMENT.md](AWS_DEPLOYMENT.md) for detailed instructions.
-
-### Quick AWS Deployment Steps
-
-1. Create AWS RDS PostgreSQL database
-2. Launch EC2 instance or use Elastic Beanstalk
-3. Configure environment variables
-4. Build and deploy the application
-5. Set up load balancer and SSL (recommended)
-
-## Environment Variables
-
+### Using AWS CLI
 ```bash
-# Application
+# Create KMS key
+aws kms create-key \
+    --description "CTF Database Encryption Key" \
+    --key-usage ENCRYPT_DECRYPT \
+    --key-spec SYMMETRIC_DEFAULT
+
+# Create alias for easier reference
+aws kms create-alias \
+    --alias-name alias/ctf-database-key \
+    --target-key-id <KEY_ID_FROM_ABOVE>
+```
+
+## Step 2: Create RDS PostgreSQL with KMS Encryption
+
+### Using AWS Console
+1. Go to **AWS RDS Console**
+2. Click **"Create database"**
+3. Choose **"PostgreSQL"**
+4. Select PostgreSQL version 13.0 or higher
+5. Choose instance class:
+   - **t3.micro** for testing
+   - **t3.small+** for production
+6. **Enable Encryption**:
+   - ✅ Check "Enable encryption"
+   - Select your custom KMS key or use AWS managed key
+7. Configure database settings:
+   - **DB Instance Identifier**: `ctf-database`
+   - **Master Username**: `ctf_user`
+   - **Master Password**: Create a secure password
+   - **Database Name**: `ctf_database`
+8. **Network & Security**:
+   - **VPC**: Select your VPC
+   - **Subnet group**: Choose private subnets (recommended)
+   - **Public access**: **No** (recommended for security)
+   - **VPC security groups**: Create new security group
+9. **Additional Configuration**:
+   - ✅ Enable automated backups
+   - Set backup retention period (7-30 days)
+   - ✅ Enable Performance Insights (optional)
+
+### Using AWS CLI
+```bash
+# Create RDS instance with KMS encryption
+aws rds create-db-instance \
+    --db-instance-identifier ctf-database \
+    --db-instance-class db.t3.micro \
+    --engine postgres \
+    --engine-version 15.4 \
+    --master-username ctf_user \
+    --master-user-password YOUR_SECURE_PASSWORD \
+    --allocated-storage 20 \
+    --storage-type gp3 \
+    --storage-encrypted \
+    --kms-key-id alias/ctf-database-key \
+    --db-name ctf_database \
+    --vpc-security-group-ids sg-xxxxxxxxx \
+    --db-subnet-group-name your-subnet-group \
+    --backup-retention-period 7 \
+    --no-publicly-accessible
+```
+
+## Step 3: Configure Security Groups
+
+### Create Security Group for RDS
+```bash
+# Create security group for RDS
+aws ec2 create-security-group \
+    --group-name ctf-rds-sg \
+    --description "Security group for CTF RDS database" \
+    --vpc-id vpc-xxxxxxxxx
+
+# Allow PostgreSQL access from EC2 security group
+aws ec2 authorize-security-group-ingress \
+    --group-id sg-rds-xxxxxxxxx \
+    --protocol tcp \
+    --port 5432 \
+    --source-group sg-ec2-xxxxxxxxx
+```
+
+### Security Group Rules
+- **Inbound**: Port 5432 (PostgreSQL) from EC2 security group only
+- **Outbound**: Default (all traffic allowed)
+
+## Step 4: Configure EC2 Instance
+
+### Install Required Packages
+```bash
+# Update system
+sudo yum update -y
+
+# Install PostgreSQL client for testing
+sudo yum install postgresql -y
+
+# Install Go (if not already installed)
+sudo amazon-linux-extras install golang1.21 -y
+```
+
+### Create IAM Role for EC2 (Optional - for IAM Database Authentication)
+```bash
+# Create IAM policy for RDS access
+cat > rds-policy.json << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "rds-db:connect"
+            ],
+            "Resource": [
+                "arn:aws:rds-db:us-east-1:ACCOUNT-ID:dbuser:ctf-database/ctf_user"
+            ]
+        }
+    ]
+}
+EOF
+
+# Create and attach policy
+aws iam create-policy \
+    --policy-name CTFDatabaseAccess \
+    --policy-document file://rds-policy.json
+
+aws iam attach-role-policy \
+    --role-name YourEC2Role \
+    --policy-arn arn:aws:iam::ACCOUNT-ID:policy/CTFDatabaseAccess
+```
+
+## Step 5: Test Database Connection
+
+### Test with PostgreSQL Client
+```bash
+# Test standard authentication
+psql "host=ctf-database.xxxxxxxxx.us-east-1.rds.amazonaws.com port=5432 dbname=ctf_database user=ctf_user sslmode=require"
+```
+
+### Download SSL Certificate (Recommended)
+```bash
+# Download RDS CA certificate
+wget https://s3.amazonaws.com/rds-downloads/rds-ca-2019-root.pem
+
+# Test with SSL certificate verification
+psql "host=ctf-database.xxxxxxxxx.us-east-1.rds.amazonaws.com port=5432 dbname=ctf_database user=ctf_user sslmode=verify-ca sslrootcert=rds-ca-2019-root.pem"
+```
+
+## Step 6: Configure Application Environment
+
+### Environment Variables
+```bash
+# Create .env file for your application
+cat > .env << EOF
+# Application Configuration
 PORT=8080
 GIN_MODE=release
 
-# Database (AWS RDS)
-DB_HOST=your-rds-endpoint.region.rds.amazonaws.com
+# AWS RDS Database Configuration with KMS Encryption
+DB_HOST=ctf-database.xxxxxxxxx.us-east-1.rds.amazonaws.com
 DB_PORT=5432
-DB_USER=your_db_username
-DB_PASSWORD=your_db_password
+DB_USER=ctf_user
+DB_PASSWORD=your_secure_password
 DB_NAME=ctf_database
 DB_SSLMODE=require
 
-# Security
-JWT_SECRET=your-super-secret-jwt-key
+# Database Connection Pool Settings
+DB_MAX_OPEN_CONNS=25
+DB_MAX_IDLE_CONNS=10
+DB_CONN_MAX_LIFETIME=300
+
+# AWS Configuration
+AWS_REGION=us-east-1
+
+# JWT Secret
+JWT_SECRET=$(openssl rand -base64 32)
+EOF
 ```
 
-## Contributing
+## Step 7: Security Best Practices
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+### Network Security
+- ✅ Use **private subnets** for RDS
+- ✅ **No public access** to RDS
+- ✅ Restrict security groups to application tier only
+- ✅ Use **VPC endpoints** for AWS services (optional)
 
-## License
+### Encryption
+- ✅ **KMS encryption** at rest (configured in Step 2)
+- ✅ **SSL/TLS encryption** in transit (`sslmode=require`)
+- ✅ Use **customer-managed KMS keys** for better control
 
-This project is licensed under the MIT License.
+### Access Control
+- ✅ Use **IAM database authentication** (optional)
+- ✅ **Rotate passwords** regularly if using standard auth
+- ✅ Apply **principle of least privilege**
+- ✅ Enable **database activity streams** (optional)
 
-## Security Considerations
+### Monitoring
+- ✅ Enable **Performance Insights**
+- ✅ Set up **CloudWatch alarms**
+- ✅ Enable **Enhanced Monitoring**
+- ✅ Configure **automated backups**
 
-- Change default JWT secret in production
-- Use HTTPS in production
-- Regularly update dependencies
-- Monitor for security vulnerabilities
-- Use AWS Secrets Manager for sensitive configuration in production
+## Step 8: Troubleshooting
 
-## Support
+### Common Connection Issues
 
-For issues and questions, please create an issue in the GitHub repository.
+#### 1. Connection Timeout
+```bash
+# Check security groups
+aws ec2 describe-security-groups --group-ids sg-xxxxxxxxx
+
+# Test network connectivity
+telnet your-rds-endpoint.region.rds.amazonaws.com 5432
+```
+
+#### 2. SSL Certificate Issues
+```bash
+# Verify SSL configuration
+openssl s_client -connect your-rds-endpoint.region.rds.amazonaws.com:5432 -starttls postgres
+```
+
+#### 3. Authentication Failures
+```bash
+# Check RDS logs
+aws rds describe-db-log-files --db-instance-identifier ctf-database
+aws rds download-db-log-file-portion --db-instance-identifier ctf-database --log-file-name error/postgresql.log.2024-08-31-18
+```
+
+### Monitoring Commands
+```bash
+# Check RDS status
+aws rds describe-db-instances --db-instance-identifier ctf-database
+
+# Monitor connections
+aws cloudwatch get-metric-statistics \
+    --namespace AWS/RDS \
+    --metric-name DatabaseConnections \
+    --dimensions Name=DBInstanceIdentifier,Value=ctf-database \
+    --start-time 2024-08-31T00:00:00Z \
+    --end-time 2024-08-31T23:59:59Z \
+    --period 3600 \
+    --statistics Average
+```
+
+## Important Notes
+
+- **KMS Keys**: Customer-managed keys provide better audit trails and control
+- **SSL/TLS**: Always use `sslmode=require` or higher for production
+- **Backups**: Automated backups are also encrypted with the same KMS key
+- **Cross-Region**: KMS keys are region-specific
+- **Performance**: Connection pooling is crucial for RDS performance
+- **Costs**: Monitor RDS usage and optimize instance sizing
+
+This setup ensures your CTF backend application connects securely to AWS RDS with KMS encryption, providing enterprise-grade security for your database communications.
