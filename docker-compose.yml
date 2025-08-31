@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${POSTGRES_CONTAINER}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ${NETWORK_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # NocoDB - Database Admin Interface
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: ${NOCODB_CONTAINER}
+    restart: unless-stopped
+    ports:
+      - "${NOCODB_PORT}:8080"
+    environment:
+      NC_DB: "pg://${DB_HOST}:5432?u=${DB_USER}&p=${DB_PASSWORD}&d=${NOCODB_DB_NAME}"
+      NC_AUTH_JWT_SECRET: ${NC_AUTH_JWT_SECRET}
+      NC_PUBLIC_URL: ${NC_PUBLIC_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - nocodb_data:/usr/app/data
+    networks:
+      - ${NETWORK_NAME}
+
+  # CTF Backend Application
+  ctf_backend:
+    build: .
+    container_name: ${BACKEND_CONTAINER}
+    restart: unless-stopped
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      # Database Configuration
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      # Application Configuration
+      PORT: ${PORT}
+      GIN_MODE: ${GIN_MODE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ${NETWORK_NAME}
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  nocodb_data:
+    driver: local
+
+# Custom network
+networks:
+  ctf_network:
+    driver: bridge
