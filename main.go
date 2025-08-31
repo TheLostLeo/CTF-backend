@@ -6,6 +6,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/thelostleo/CTF-backend/api/routes"
+	"github.com/thelostleo/CTF-backend/database"
+	"github.com/thelostleo/CTF-backend/models"
 )
 
 func main() {
@@ -14,6 +16,16 @@ func main() {
 	if err != nil {
 		log.Println("Warning: .env file not found, using default values")
 	}
+
+	// Connect to PostgreSQL database
+	database.ConnectDatabase()
+
+	// Auto-migrate database schemas
+	err = database.DB.AutoMigrate(&models.User{}, &models.Challenge{}, &models.Submission{})
+	if err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+	log.Println("✅ Database migration completed successfully!")
 
 	portString := os.Getenv("PORT")
 	if portString == "" {

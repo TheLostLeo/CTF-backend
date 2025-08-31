@@ -16,12 +16,8 @@ func NewRouter() *gin.Engine {
 	// Add CORS middleware
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
-			"http://localhost:3000",
-			"http://localhost:3001",
-			"http://localhost:5173",
-			"http://localhost:8080",
-			"http://127.0.0.1:3000",
-			"http://127.0.0.1:5173",
+			"http://*",
+			"https://*",
 		},
 		AllowMethods: []string{
 			"GET",
@@ -44,7 +40,6 @@ func NewRouter() *gin.Engine {
 		MaxAge:           5 * time.Minute,
 	}))
 
-	// Setup routes
 	setupBasicRoutes(router)
 
 	return router
